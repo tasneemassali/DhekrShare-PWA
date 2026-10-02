@@ -89,7 +89,7 @@ for(const initiatingRole of ['owner','guest'])test(`unlink from ${initiatingRole
   }
   const state=await (await handler(req('status',{},fresh))).json();
   assert.equal(state.state,'waiting');assert.equal(state.canCreate,true);
-  assert.equal(state.pushReady,true);assert.equal(state.otherReady,false);
+  assert.equal(state.pushReady,false);assert.equal(state.otherReady,false);
   assert.equal((await handler(req('send',{dhikrID:0},fresh))).status,409);
   h.clearRates();assert.equal((await handler(req('join',{code:oldCode}))).status,409);
   h.clearRates();
@@ -99,6 +99,7 @@ for(const initiatingRole of ['owner','guest'])test(`unlink from ${initiatingRole
   await handler(req('subscribe',{subscription:await subscription('replacement')},c));
   assert.equal((await handler(req('send',{dhikrID:0},fresh))).status,200);
   assert.equal(h.sends.at(-1).url,'https://web.push.apple.com/replacement');
+  await handler(req('subscribe',{subscription:await subscription('original-'+(initiatingRole==='owner'?'a':'b'))},fresh));
   assert.equal((await handler(req('send',{dhikrID:1},c))).status,200);
   assert.equal(h.sends.at(-1).url,'https://web.push.apple.com/original-'+(initiatingRole==='owner'?'a':'b'));
   h.sqlite.close();

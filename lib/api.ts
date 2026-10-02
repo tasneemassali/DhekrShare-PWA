@@ -106,11 +106,12 @@ async function handle(request:Request){
   if(action==='unlink'){
     const credential=randomToken();
     // Either paired device may leave. Rotate both credentials atomically;
-    // retain only this device's subscription and its ability to create a code.
+    // keep the initiating device's ability to create a code. Both notification
+    // subscriptions must be enrolled afresh after pairing changes.
     const result=await database().prepare(`UPDATE pair SET owner=?,guest=NULL,code_hash=NULL,expires=0,
-      owner_subscription=?,guest_subscription=NULL,owner_sent=0,guest_sent=0
+      owner_subscription=NULL,guest_subscription=NULL,owner_sent=0,guest_sent=0
       WHERE id=1 AND owner=? AND guest IS ?`)
-      .bind(await digest(credential),(role==='owner'?pair.owner_subscription:pair.guest_subscription),pair.owner,pair.guest).run();
+      .bind(await digest(credential),pair.owner,pair.guest).run();
     if(!result.meta.changes)reject(409,'تغيّرت حالة الربط.');
     return response({unlinked:true},200,credential);
   }

@@ -69,7 +69,7 @@ Try all seven buttons, dark mode, large text, and a notification while the recei
 - **No internet:** reconnect and retry deliberately. The app does not queue or automatically resend reminders.
 - **Expired code:** the original first installation can generate a new code.
 - **Pair started in the wrong browser:** sign in as the owner and choose **استعادة الربط على هذا الجهاز**. This works only before the second phone joins.
-- **Replacing the other device:** open **الربط → فصل الربط → تأكيد الفصل** on either linked device, then **إنشاء رمز ربط**. The replacement device enters that code. The disconnected device loses access. The device that initiated unlinking keeps its notification subscription and becomes the code creator. A fully lost installation still needs administrator recovery.
+- **Replacing the other device:** open **الربط → فصل الربط → تأكيد الفصل** on either linked device, then **إنشاء رمز ربط**. The replacement device enters that code. The disconnected device loses access. The device that initiated unlinking becomes the code creator. Notifications need activation again on both devices. A fully lost installation still needs administrator recovery.
 
 ## Administrator recovery and deletion
 
@@ -98,4 +98,8 @@ Open `/repair.html?v=5` on the same app origin in Safari. It updates the existin
 
 ## Disconnecting and pairing again
 
-Either linked device can choose **الربط → فصل الربط → تأكيد الفصل**. This revokes both old device credentials, removes the other subscription, and keeps only the initiating device with a fresh credential. It can create a new code without another ChatGPT login. On the replacement device, use **رمز الربط → ربط**, then enable notifications. Existing notifications already accepted by a push provider may still arrive; disconnecting cannot retract them.
+Either linked device can choose **الربط → فصل الربط → تأكيد الفصل**. This revokes both old device credentials, removes both notification subscriptions, and keeps only the initiating device with a fresh credential. It can create a new code without another ChatGPT login. On the replacement device, use **رمز الربط → ربط**, then enable notifications. Existing notifications already accepted by a push provider may still arrive; disconnecting cannot retract them.
+
+### Notifications stopped after re-pairing
+
+On the affected phone, open the installed Home Screen app, then **الربط → إصلاح الإشعارات** (or **تفعيل الإشعارات**). This now replaces the browser subscription even if the server still considers the old one ready. No pairing reset is needed. After future disconnects, both devices enroll fresh subscriptions.

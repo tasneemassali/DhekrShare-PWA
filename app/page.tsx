@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogClose } from '@/components/ui/dialog';
 import { DHIKR } from '@/lib/dhikr';
+import { renewSubscription } from '@/lib/notifications.mjs';
 
 type Status = { state: 'new' | 'waiting' | 'paired'; pushReady: boolean; otherReady: boolean; publicKey: string; configured: boolean; canCreate:boolean; canRecover:boolean };
 const empty: Status = {state:'new',pushReady:false,otherReady:false,publicKey:'',configured:false,canCreate:false,canRecover:false};
@@ -40,15 +41,21 @@ export default function Home() {
   const [received,setReceived]=useState('');
   const lock=useRef(false);
   const sw=useRef<ServiceWorkerRegistration|null>(null);
+  const subscriptionSync=useRef<Promise<void>|null>(null);
   const statusRef=useRef(status); statusRef.current=status;
   const refresh=useCallback(async()=>{
     try {const next=await api('status');statusRef.current=next;setStatus(next);return next as Status;}
     catch(e){setError((e as Error).message);return null;}
   },[]);
   const syncSubscription=useCallback(async()=>{
-    if(!sw.current||statusRef.current.state==='new') return;
-    const sub=await sw.current.pushManager?.getSubscription();
-    if(sub) await api('subscribe',{subscription:sub.toJSON()});
+    if(!sw.current||statusRef.current.state==='new'||!statusRef.current.pushReady||lock.current) return;
+    if(subscriptionSync.current)return subscriptionSync.current;
+    const task=(async()=>{
+      const sub=await sw.current!.pushManager?.getSubscription();
+      if(sub&&!lock.current)await api('subscribe',{subscription:sub.toJSON()});
+    })();
+    subscriptionSync.current=task;
+    try{await task;}finally{subscriptionSync.current=null;}
   },[]);
   useEffect(()=>{
     setStandalone(window.matchMedia('(display-mode: standalone)').matches || !!(navigator as Navigator & {standalone?:boolean}).standalone);
@@ -110,9 +117,8 @@ export default function Home() {
       const choice=await permissionRequest;setPermission(choice);
       if(choice!=='granted')throw new Error('إذن الإشعارات غير متاح.');
       const registration=await navigator.serviceWorker.ready;
-      let sub=await registration.pushManager.getSubscription();
-      if(sub&&!status.pushReady){await sub.unsubscribe();sub=null;}
-      sub=sub||await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:applicationKey(status.publicKey)});
+      await subscriptionSync.current?.catch(()=>{});
+      const sub=await renewSubscription(registration,applicationKey(status.publicKey));
       await api('subscribe',{subscription:sub.toJSON()});await refresh();
     });
   }
@@ -152,7 +158,7 @@ export default function Home() {
             </section>}
           </>}
           {status.state!=='new'&&<section>
-            <Button disabled={busy} onClick={enableNotifications}><Bell/>{status.pushReady&&permission==='granted'?'تحديث الإشعارات':'تفعيل الإشعارات'}</Button>
+            <Button disabled={busy} onClick={enableNotifications}><Bell/>{status.pushReady&&permission==='granted'?'إصلاح الإشعارات':'تفعيل الإشعارات'}</Button>
             {!confirmUnlink?<Button variant="ghost" disabled={busy} onClick={()=>setConfirmUnlink(true)}><Unlink/>فصل الربط</Button>:<div className="unlink-confirm">
               <p>فصل الربط يوقف التواصل مع الجهاز الآخر. يمكن إنشاء رمز جديد بعدها.</p>
               <Button className="danger-button" disabled={busy} onClick={()=>void perform(async()=>{await api('unlink',{});setCode('');setEntry('');setReceived('');setFeedback('');setConfirmUnlink(false);await refresh();})}>تأكيد الفصل</Button>
