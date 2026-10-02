@@ -10,5 +10,6 @@ declare namespace Cloudflare {
     VAPID_PRIVATE_KEY?: string;
     VAPID_SUBJECT?: string;
     APP_ORIGIN?: string;
+    OWNER_EMAIL_HASH?: string;
   }
 }

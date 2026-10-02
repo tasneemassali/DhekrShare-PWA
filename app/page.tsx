@@ -6,8 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogClose } from '@/components/ui/dialog';
 import { DHIKR } from '@/lib/dhikr';
 
-type Status = { state: 'new' | 'waiting' | 'paired'; pushReady: boolean; otherReady: boolean; publicKey: string; configured: boolean };
-const empty: Status = {state:'new',pushReady:false,otherReady:false,publicKey:'',configured:false};
+type Status = { state: 'new' | 'waiting' | 'paired'; pushReady: boolean; otherReady: boolean; publicKey: string; configured: boolean; canCreate:boolean; canRecover:boolean };
+const empty: Status = {state:'new',pushReady:false,otherReady:false,publicKey:'',configured:false,canCreate:false,canRecover:false};
 async function api(action: string, body?: object) {
   const response = await fetch('/api/dhikr'+(body ? '' : '?action='+action), {
     method:body?'POST':'GET', credentials:'same-origin', cache:'no-store',
@@ -41,7 +41,7 @@ export default function Home() {
   const sw=useRef<ServiceWorkerRegistration|null>(null);
   const statusRef=useRef(status); statusRef.current=status;
   const refresh=useCallback(async()=>{
-    try {const next=await api('status');setStatus(next);return next as Status;}
+    try {const next=await api('status');statusRef.current=next;setStatus(next);return next as Status;}
     catch(e){setError((e as Error).message);return null;}
   },[]);
   const syncSubscription=useCallback(async()=>{
@@ -54,6 +54,7 @@ export default function Home() {
     setPermission('Notification' in window?Notification.permission:'unsupported');
     const network=()=>setOnline(navigator.onLine);
     network(); window.addEventListener('online',network);window.addEventListener('offline',network);
+    if(new URLSearchParams(window.location.search).has('pair'))setPanel('pair');
     void refresh();
     if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js',{scope:'/'}).then(async reg=>{
       sw.current=reg;
@@ -136,7 +137,7 @@ export default function Home() {
           <Button onClick={()=>setPanel('pair')}>ربط الجهازين</Button>
         </>:<>
           {status.state==='paired'?<section><p>الجهازان مرتبطان ❤️</p><p className="hint">{status.otherReady?'إشعارات الجهاز الآخر جاهزة.':'افتحي التطبيق على الجهاز الآخر وفعّلي الإشعارات.'}</p></section>:<>
-            <section><h3>على الجهاز الأول</h3><Button disabled={busy} onClick={()=>void perform(async()=>{const result=await api('create',{});setCode(result.code);await refresh();})}>إنشاء رمز ربط</Button>{code&&<><output className="pair-code">{code}</output><p className="hint">صالح لعشر دقائق. اكتبيه على الجهاز الآخر.</p></>}</section>
+            <section><h3>على الجهاز الأول</h3>{status.canCreate?<Button disabled={busy} onClick={()=>void perform(async()=>{const result=await api(status.canRecover?'recover':'create',{});setCode(result.code);await refresh();})}>{status.canRecover?'استعادة الربط على هذا الجهاز':'إنشاء رمز ربط'}</Button>:<><p className="hint">لإنشاء الرمز، سجّلي الدخول بحساب صاحبة التطبيق. الجهاز الآخر لا يحتاج تسجيل دخول.</p><Button asChild><a href="/signin-with-chatgpt?return_to=%2F%3Fpair%3D1" target="_top">دخول صاحبة التطبيق</a></Button></>}{status.canRecover&&<p className="hint">بدأ الربط من متصفح آخر. الاستعادة تنقل الربط غير المكتمل إلى هذا الجهاز وتصدر رمزاً جديداً.</p>}{code&&<><output className="pair-code">{code}</output><p className="hint">صالح لعشر دقائق. اكتبيه على الجهاز الآخر.</p></>}</section>
             {status.state==='new'&&<section><h3>على الجهاز الآخر</h3><label htmlFor="pair-code">إدخال رمز الربط</label><Input id="pair-code" inputMode="numeric" autoComplete="off" dir="ltr" maxLength={6} placeholder="000000" value={entry} onChange={e=>setEntry(e.target.value.replace(/[٠-٩۰-۹]/g,d=>String(d.charCodeAt(0)%(d.charCodeAt(0)>1775?1776:1632))).replace(/\D/g,''))}/><Button disabled={busy||entry.length!==6} onClick={()=>void perform(async()=>{await api('join',{code:entry});setEntry('');await refresh();})}>ربط</Button></section>}
           </>}
           {status.state!=='new'&&<section><Button disabled={busy} onClick={enableNotifications}><Bell/>{status.pushReady&&permission==='granted'?'تحديث الإشعارات':'تفعيل الإشعارات'}</Button><Button variant="ghost" disabled={busy} onClick={()=>void refresh()}>تحديث حالة الربط</Button></section>}

@@ -27,7 +27,7 @@ The app uses `@block65/webcrypto-web-push` 2.x with RFC 8291 `aes128gcm` and RFC
 | Path | Purpose |
 | --- | --- |
 | `app/page.tsx` | Home, pairing, installation and permission flows |
-| `app/api/dhikr/route.ts` | Pairing, subscription, status and send API |
+| `app/api/dhikr/route.ts`, `lib/api.ts` | Pairing, subscription, status and send API |
 | `lib/dhikr.ts` | Exact seven dhikr strings |
 | `lib/policy.mjs` | Validation, cryptographic randomness and token hashing |
 | `db/schema.ts`, `drizzle/` | Durable database schema and migrations |
@@ -38,11 +38,11 @@ The app uses `@block65/webcrypto-web-push` 2.x with RFC 8291 `aes128gcm` and RFC
 
 ## Access and pairing security
 
-This deployment is a **private Site**, protected by the hosting platform's ChatGPT sign-in and access policy. The owner must grant the sister access before she can open it. Site access and device pairing are separate layers. Never share an account password.
+The Site is publicly reachable, while pairing and sending remain private. Only the Site owner may create the first pairing invitation, using the owner's verified ChatGPT sign-in once. The second phone joins with the six-digit code and does not need a ChatGPT account. After pairing, both phones authenticate using their own device cookies.
 
-The Worker requires the hosting platform's verified `oai-authenticated-user-id` header. The public GitHub source does not grant access. Do not expose this Worker through an untrusted proxy that accepts user-supplied identity headers, and do not turn the Site public without redesigning enrollment authorization.
+First-device enrollment verifies Sites' trusted `oai-authenticated-user-email` against the server-only `OWNER_EMAIL_HASH`. Status and invitation redemption no longer require a ChatGPT identity header. Sending and subscription changes still require a paired device credential. Sites must sanitize/verify the identity header; never expose this handler through a proxy that accepts forged identity headers.
 
-Each browser installation receives a random 256-bit credential in a `Secure`, `HttpOnly`, `SameSite=Strict`, host-only cookie. Only its SHA-256 hash is stored in D1. The first authorized device atomically claims the first slot; only it can regenerate its pending code. Joining atomically consumes the code and fills the second slot. The UI never receives another device's token or push endpoint. Mutations require the configured exact Origin and JSON; joining has a global throttle.
+Each browser installation receives a random 256-bit credential in a `Secure`, `HttpOnly`, `SameSite=Strict`, host-only cookie. Only its SHA-256 hash is stored in D1. The first owner-authorized device atomically claims the first slot; it can regenerate its pending code. If pairing began in a different browser, the signed-in owner can explicitly recover only an unfinished pair, revoking the old browser cookie and subscription. A completed pair cannot be taken over through this recovery action. Joining atomically consumes the code and fills the second slot. The UI never receives another device's token or push endpoint. Mutations require the configured exact Origin and JSON; joining has a global throttle.
 
 Push endpoints are restricted to known Apple, Google and Mozilla push hosts. Redirects are rejected to prevent server-side request forgery. Only encrypted payloads go to the push service. App infrastructure processes the plaintext dhikr before encryption; this is not independently verifiable end-to-end encryption between the two phones.
 
@@ -58,6 +58,7 @@ Server-only runtime variables:
 | `VAPID_PRIVATE_KEY` | Server signing key | **Yes** |
 | `VAPID_SUBJECT` | Valid HTTPS contact/site URL | No |
 | `APP_ORIGIN` | Exact canonical HTTPS origin for CSRF validation | No |
+| `OWNER_EMAIL_HASH` | SHA-256 of the verified owner email; restricts first-device enrollment | Server-only |
 
 These are configured through the hosting platform; values never belong in source or `.openai/hosting.json`. `.env.example` is a placeholder only. Real `.env*`, private keys, local databases and generated output are excluded from Git. Retain the VAPID key pair across deployments; replacing it requires both devices to re-subscribe.
 
@@ -70,14 +71,14 @@ Use Node 22.13+ and the pnpm version in `package.json`:
 ```sh
 pnpm install --frozen-lockfile
 pnpm exec tsc --noEmit
-node --test tests/*.test.mjs
+node --experimental-strip-types --test tests/*.test.mjs
 python3 tests/sql_test.py
 pnpm build
 ```
 
 The hosting workflow builds a Cloudflare-compatible Worker and applies the D1 migration. A GitHub source repository alone does not host the database or push backend; GitHub Pages cannot run this backend.
 
-Private access checks are intentionally active in development. UI-only local previews can render without platform authentication, but write APIs need the verified hosting identity. Never add a production auth bypass to make a local test pass. To deploy elsewhere, first replace the platform access boundary with a real server-verified allowlist/authentication system; arbitrary custom headers are not authentication.
+The actual API handler is dependency-injected for tests. Integration tests execute it against SQLite with two independent device cookies, verified-owner fixtures, an anonymous guest, real encryption, and an intercepted push transport. They do not send test notifications to real phones. Production enrollment trusts only identity verified by Sites; no test authentication bypass is deployed.
 
 Validation covers TypeScript, policy checks, real Web Crypto encryption, SQLite pairing exclusivity and cooldowns, and production build. Actual background delivery, installation and notification permissions need acceptance testing on the user's two iPhones. Browser-specific WebMCP validation was unavailable in this environment; its optional read-only tool does not affect normal use.
 
@@ -86,7 +87,11 @@ Validation covers TypeScript, policy checks, real Web Crypto encryption, SQLite 
 - iOS/iPadOS 16.4+ supports Web Push for apps installed on the Home Screen; permission must follow a user gesture.
 - Delivery depends on connectivity, permission, Focus settings, OS behavior and the push provider. No silent background polling is used.
 - Keep both installations and their browser data; deleting them may remove the device identity and require administrator reset.
-- Site login can expire. Reopen the app and sign in again when asked. A push already accepted by the provider does not need a foreground page to display.
-- Site access remains private; adding your sister is required for two-person use.
+- Owner sign-in is required for first enrollment or unfinished-pair recovery only. Paired phones use device credentials, so an expired ChatGPT login does not prevent reminders.
+- Keep the pairing code private. A public page link alone cannot join a completed pair or send reminders.
 
 Official sources: [WebKit iPhone Web Push](https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/), [Apple Web Push](https://developer.apple.com/documentation/usernotifications/sending-web-push-notifications-in-web-apps-and-browsers), [Web Push library](https://github.com/block65/webcrypto-web-push).
+
+## Pairing fix (2026-10-02)
+
+Production logs showed HTTP 401 on guest status and pairing requests: the original handler required a ChatGPT identity even after the Site became public. The API now separates owner-only invitation creation from anonymous code redemption and paired-device operations. Regression tests run the actual API with independent sessions and cover completed-pair protection, unfinished-pair recovery, CSRF and server cooldowns.
