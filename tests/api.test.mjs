@@ -20,7 +20,7 @@ async function harness(){
   const handler=createHandler({db:()=>db,env:{APP_ORIGIN:origin,OWNER_EMAIL_HASH:await digest('owner@example.test'),VAPID_SUBJECT:origin,
     VAPID_PUBLIC_KEY:Buffer.from(await crypto.subtle.exportKey('raw',key.publicKey)).toString('base64url'),
     VAPID_PRIVATE_KEY:(await crypto.subtle.exportKey('jwk',key.privateKey)).d},
-    sendFetch:async(url,payload)=>{assert.equal(payload.redirect,'manual');sends.push({url,payload});return new Response('',{status:201});}});
+    sendFetch:async(url,payload)=>{assert.equal(payload.redirect,'manual');assert.equal(new Headers(payload.headers).get('urgency'),'high');sends.push({url,payload});return new Response('',{status:201});}});
   const req=(action,data={},cookie='',owner=false)=>new Request(origin+'/api/dhikr',{
     method:action==='status'?'GET':'POST',headers:{Origin:origin,'Content-Type':'application/json',...(cookie?{Cookie:cookie}:{}),...(owner?{'oai-authenticated-user-email':'owner@example.test'}:{})},
     ...(action==='status'?{}:{body:JSON.stringify({action,...data})}),

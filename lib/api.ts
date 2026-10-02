@@ -1,5 +1,6 @@
 import { buildPushPayload } from '@block65/webcrypto-web-push';
 import { DHIKR } from './dhikr.ts';
+import { pushMessage } from './push-message.mjs';
 import { deviceCookie, digest, randomCode, randomToken, validCode, validDhikr, validSubscription } from './policy.mjs';
 type Pair = {id:number;owner:string;guest:string|null;code_hash:string|null;expires:number;owner_subscription:string|null;guest_subscription:string|null;owner_sent:number;guest_sent:number};
 class APIError extends Error {
@@ -44,9 +45,10 @@ async function current(request:Request){
   const role=pair&&hash?(pair.owner===hash?'owner':pair.guest===hash?'guest':null):null;
   return {token,hash,pair,role};
 }
-function publicStatus(value:Awaited<ReturnType<typeof current>>,isOwner:boolean){
+async function publicStatus(value:Awaited<ReturnType<typeof current>>,isOwner:boolean){
   const {pair,role}=value;
-  return {apiVersion:2,canCreate:isOwner||role==='owner',canRecover:isOwner&&!!pair&&!role&&!pair.guest,state:role?(pair?.guest?'paired':'waiting'):'new',
+  const saved=role==='owner'?pair?.owner_subscription:role==='guest'?pair?.guest_subscription:null;
+  return {subscriptionID:saved?await digest(JSON.parse(saved).endpoint):null,apiVersion:2,canCreate:isOwner||role==='owner',canRecover:isOwner&&!!pair&&!role&&!pair.guest,state:role?(pair?.guest?'paired':'waiting'):'new',
     pushReady:!!(role==='owner'?pair?.owner_subscription:role==='guest'?pair?.guest_subscription:null),
     otherReady:!!(role==='owner'?pair?.guest_subscription:role==='guest'?pair?.owner_subscription:null),
     configured:!!(env.VAPID_PUBLIC_KEY&&env.VAPID_PRIVATE_KEY&&env.VAPID_SUBJECT), publicKey:env.VAPID_PUBLIC_KEY||''};
@@ -55,7 +57,7 @@ async function handle(request:Request){
   const isOwner=await isSiteOwner(request);
   // Public visitors can inspect only their own cookie's state and enter an invite.
   // All subscription/send writes still require a valid paired device credential.
-  if(request.method==='GET')return response(publicStatus(await current(request),isOwner));
+  if(request.method==='GET')return response(await publicStatus(await current(request),isOwner));
   const origin=request.headers.get('origin');
   if(!origin || origin!==env.APP_ORIGIN)reject(403,'الرابط غير صالح لهذا الطلب.');
   if(!request.headers.get('content-type')?.startsWith('application/json'))reject(415,'طلب غير صالح.');
@@ -133,7 +135,7 @@ async function handle(request:Request){
     if(!result.meta.changes)reject(429,'مهلة ثانيتين بين الأذكار.');
     const subscription=JSON.parse(saved);
     if(!validSubscription(subscription))reject(409,'اشتراك الجهاز الآخر غير صالح.');
-    const payload=await buildPushPayload({data:JSON.stringify({title:'تذكير',body:DHIKR[input.dhikrID as number],url:'/'}),options:{ttl:3600}},subscription,
+    const payload=await buildPushPayload({data:JSON.stringify(pushMessage(DHIKR[input.dhikrID as number],env.APP_ORIGIN!)),options:{ttl:3600,urgency:'high'}},subscription,
       {subject:env.VAPID_SUBJECT,publicKey:env.VAPID_PUBLIC_KEY,privateKey:env.VAPID_PRIVATE_KEY});
     let sent:Response;
     try{sent=await sendFetch(subscription.endpoint,{...payload,redirect:'manual',signal:AbortSignal.timeout(10000)});}catch(error){console.error('Push transport failed',JSON.stringify(networkError(error)));reject(503,'تعذّر اتصال الخادم بخدمة الإشعارات. ');}

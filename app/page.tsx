@@ -7,8 +7,8 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogClose } fr
 import { DHIKR } from '@/lib/dhikr';
 import { renewSubscription } from '@/lib/notifications.mjs';
 
-type Status = { state: 'new' | 'waiting' | 'paired'; pushReady: boolean; otherReady: boolean; publicKey: string; configured: boolean; canCreate:boolean; canRecover:boolean };
-const empty: Status = {state:'new',pushReady:false,otherReady:false,publicKey:'',configured:false,canCreate:false,canRecover:false};
+type Status = { subscriptionID:string|null; state: 'new' | 'waiting' | 'paired'; pushReady: boolean; otherReady: boolean; publicKey: string; configured: boolean; canCreate:boolean; canRecover:boolean };
+const empty: Status = {subscriptionID:null,state:'new',pushReady:false,otherReady:false,publicKey:'',configured:false,canCreate:false,canRecover:false};
 async function api(action: string, body?: object) {
   const response = await fetch('/api/dhikr'+(body ? '' : '?action='+action), {
     method:body?'POST':'GET', credentials:'same-origin', cache:'no-store',
@@ -39,6 +39,8 @@ export default function Home() {
   const [standalone,setStandalone]=useState(false);
   const [permission,setPermission]=useState('default');
   const [received,setReceived]=useState('');
+  const [localTest,setLocalTest]=useState('');
+  const [subscriptionMatches,setSubscriptionMatches]=useState<boolean|null>(null);
   const lock=useRef(false);
   const sw=useRef<ServiceWorkerRegistration|null>(null);
   const subscriptionSync=useRef<Promise<void>|null>(null);
@@ -52,7 +54,13 @@ export default function Home() {
     if(subscriptionSync.current)return subscriptionSync.current;
     const task=(async()=>{
       const sub=await sw.current!.pushManager?.getSubscription();
-      if(sub&&!lock.current)await api('subscribe',{subscription:sub.toJSON()});
+      if(sub&&!lock.current){
+        const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(sub.endpoint));
+        const id=Array.from(new Uint8Array(hash),b=>b.toString(16).padStart(2,'0')).join('');
+        const matches=id===statusRef.current.subscriptionID;
+        setSubscriptionMatches(matches);
+        if(matches)await api('subscribe',{subscription:sub.toJSON()});
+      }
     })();
     subscriptionSync.current=task;
     try{await task;}finally{subscriptionSync.current=null;}
@@ -119,7 +127,16 @@ export default function Home() {
       const registration=await navigator.serviceWorker.ready;
       await subscriptionSync.current?.catch(()=>{});
       const sub=await renewSubscription(registration,applicationKey(status.publicKey));
-      await api('subscribe',{subscription:sub.toJSON()});await refresh();
+      await api('subscribe',{subscription:sub.toJSON()});setSubscriptionMatches(true);await refresh();
+    });
+  }
+  function testNotifications(){
+    void perform(async()=>{
+      setLocalTest('');
+      if(!('Notification' in window)||Notification.permission!=='granted')throw new Error('إذن الإشعارات غير متاح في هذه النسخة.');
+      const registration=await navigator.serviceWorker.ready;
+      await registration.showNotification('تذكير',{body:'اختبار الإشعارات',lang:'ar',dir:'rtl',icon:'/icons/icon-192.png',data:{url:'/'}});
+      setLocalTest('تم طلب إشعار اختبار على هذا الجهاز');
     });
   }
   return <main>
@@ -158,7 +175,10 @@ export default function Home() {
             </section>}
           </>}
           {status.state!=='new'&&<section>
+            {subscriptionMatches===false&&<p className="hint">الإشعارات مرتبطة بنسخة أخرى من التطبيق</p>}
             <Button disabled={busy} onClick={enableNotifications}><Bell/>{status.pushReady&&permission==='granted'?'إصلاح الإشعارات':'تفعيل الإشعارات'}</Button>
+            <Button variant="ghost" disabled={busy} onClick={testNotifications}>اختبار الإشعارات</Button>
+            {localTest&&<p className="hint" role="status">{localTest}</p>}
             {!confirmUnlink?<Button variant="ghost" disabled={busy} onClick={()=>setConfirmUnlink(true)}><Unlink/>فصل الربط</Button>:<div className="unlink-confirm">
               <p>فصل الربط يوقف التواصل مع الجهاز الآخر. يمكن إنشاء رمز جديد بعدها.</p>
               <Button className="danger-button" disabled={busy} onClick={()=>void perform(async()=>{await api('unlink',{});setCode('');setEntry('');setReceived('');setFeedback('');setConfirmUnlink(false);await refresh();})}>تأكيد الفصل</Button>
