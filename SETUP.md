@@ -91,3 +91,7 @@ At creation time, `tasneemassali/DhekrShare-PWA` was public. The connected GitHu
 ### Safari says “Response served by service worker has redirections”
 
 The updated app no longer intercepts page navigation or sign-in redirects. Open the main app link in Safari, wait a few seconds for its notification worker to update, then reopen the app and retry sign-in. Do not delete the app or clear website data: that can remove your device pairing cookie. A fresh launch requires an internet connection.
+
+### Stuck on the old offline screen despite an internet connection
+
+Open `/repair.html?v=5` on the same app origin in Safari. It updates the existing notification worker, waits until the new worker controls the page, checks the API, and opens the home screen. It does not unregister push, clear cookies, reset pairing, or send a notification. If it cannot reach the app, it says so without claiming the phone is offline. Do not clear all website data.

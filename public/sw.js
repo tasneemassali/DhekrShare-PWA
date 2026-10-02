@@ -28,3 +28,7 @@ self.addEventListener('pushsubscriptionchange',event=>{
   // Renewal needs a foreground session on this private Site; never silently send.
   event.waitUntil(self.clients.matchAll({type:'window'}).then(clients=>clients.forEach(client=>client.postMessage({type:'subscription-changed'}))));
 });
+
+self.addEventListener('message',event=>{
+  if(event.data?.type==='DHEKR_VERSION') event.ports[0]?.postMessage({version:5});
+});
