@@ -33,7 +33,7 @@ async function repair() {
     // Always leave /offline.html, rather than repeatedly reloading it.
     location.replace('/?recovered=5');
   } catch {
-    statusText.textContent = 'تعذّر الوصول إلى التطبيق أو إكمال تحديثه. قد يكون الإنترنت متصلاً؛ حاولي مجدداً.';
+    statusText.textContent = 'تعذّر الوصول إلى التطبيق أو إكمال تحديثه. قد يكون الإنترنت متصلاً؛ المحاولة متاحة مجدداً.';
     retry.disabled = false;
   }
 }

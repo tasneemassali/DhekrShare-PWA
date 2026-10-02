@@ -1,4 +1,4 @@
-# ذِكر ❤️ — DhekrShare PWA
+# ذِكر — DhekrShare PWA
 
 A private Arabic-first reminder app for two paired iPhones. **This repository contains the PWA only.** It is independent of `tasneemassali/DhekrShare`; there is no Swift, Xcode project, native wrapper, or subtitle.
 
@@ -6,7 +6,7 @@ A private Arabic-first reminder app for two paired iPhones. **This repository co
 
 Open the published site in Safari and add it to the Home Screen on each iPhone. Open the installed icon, pair the devices with a six-digit code, and explicitly allow notifications. See [SETUP.md](SETUP.md).
 
-Seven buttons send the corresponding dhikr to the other paired device. The success message is exactly **تم الذكر ❤️**. The notification title is **تذكير ❤️**, and its body is only the dhikr. There are no sender names.
+Seven buttons send the corresponding dhikr to the other paired device. The success message is exactly **تم الذكر**. The notification title is **تذكير**, and its body is only the dhikr. There are no sender names.
 
 ## Features
 
@@ -95,3 +95,5 @@ Official sources: [WebKit iPhone Web Push](https://webkit.org/blog/13878/web-pus
 ## Pairing fix (2026-10-02)
 
 Production logs showed HTTP 401 on guest status and pairing requests: the original handler required a ChatGPT identity even after the Site became public. The API now separates owner-only invitation creation from anonymous code redemption and paired-device operations. Regression tests run the actual API with independent sessions and cover completed-pair protection, unfinished-pair recovery, CSRF and server cooldowns.
+
+Either linked device can disconnect through **الربط → فصل الربط**, confirm, and create a new pairing code. Credentials rotate atomically, the former partner is revoked, and only the initiating device retains its subscription. The app uses a neutral slate theme and gender-neutral Arabic labels, without hearts.

@@ -73,3 +73,33 @@ test('actual API: cross-origin write rejected and unrelated signed-in account ca
   assert.equal((await h.handler(other)).status,401);
   h.sqlite.close();
 });
+for(const initiatingRole of ['owner','guest'])test(`unlink from ${initiatingRole}: revoke old devices and re-pair with replacement`,async()=>{
+  const h=await harness();const {handler,req}=h;
+  const first=await handler(req('create',{},'',true));const a=cookie(first);const oldCode=(await first.json()).code;
+  const second=await handler(req('join',{code:oldCode}));const b=cookie(second);
+  for(const [device,suffix] of [[a,'original-a'],[b,'original-b']])await handler(req('subscribe',{subscription:await subscription(suffix)},device));
+  assert.equal((await handler(req('unlink'))).status,403,'anonymous visitors cannot disconnect');
+  const unlinked=await handler(req('unlink',{},initiatingRole==='owner'?a:b));assert.equal(unlinked.status,200);
+  const fresh=cookie(unlinked);assert.notEqual(fresh,a);assert.notEqual(fresh,b);
+  for(const old of [a,b]){
+    assert.equal((await (await handler(req('status',{},old))).json()).state,'new');
+    assert.equal((await handler(req('send',{dhikrID:0},old))).status,403);
+    assert.equal((await handler(req('subscribe',{subscription:await subscription('stale')},old))).status,403);
+    assert.equal((await handler(req('unlink',{},old))).status,403);
+  }
+  const state=await (await handler(req('status',{},fresh))).json();
+  assert.equal(state.state,'waiting');assert.equal(state.canCreate,true);
+  assert.equal(state.pushReady,true);assert.equal(state.otherReady,false);
+  assert.equal((await handler(req('send',{dhikrID:0},fresh))).status,409);
+  h.clearRates();assert.equal((await handler(req('join',{code:oldCode}))).status,409);
+  h.clearRates();
+  const replacementCode=await handler(req('create',{},fresh));assert.equal(replacementCode.status,200);
+  const replacement=await handler(req('join',{code:(await replacementCode.json()).code}));assert.equal(replacement.status,200);
+  const c=cookie(replacement);
+  await handler(req('subscribe',{subscription:await subscription('replacement')},c));
+  assert.equal((await handler(req('send',{dhikrID:0},fresh))).status,200);
+  assert.equal(h.sends.at(-1).url,'https://web.push.apple.com/replacement');
+  assert.equal((await handler(req('send',{dhikrID:1},c))).status,200);
+  assert.equal(h.sends.at(-1).url,'https://web.push.apple.com/original-'+(initiatingRole==='owner'?'a':'b'));
+  h.sqlite.close();
+});

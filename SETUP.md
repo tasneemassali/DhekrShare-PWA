@@ -1,4 +1,4 @@
-# Set up ذِكر ❤️ from your iPhone
+# Set up ذِكر from your iPhone
 
 This is the new **PWA** project. You do not need Apple Developer enrollment, TestFlight, Xcode, Firebase, or a Mac. The old native app repository is separate and unchanged.
 
@@ -10,13 +10,13 @@ https://dhekrshare-pwa.hbmw2mmpvk.chatgpt.site
 
 The link can open on both phones. **Only the first phone needs the owner's ChatGPT sign-in to create a pairing code. The second phone does not need to sign in or receive a separate site-sharing invitation.** Never share your password.
 
-If the first phone shows **دخول صاحبة التطبيق**, tap it and sign in with the same ChatGPT account that owns this Site. After returning, open **ربط الجهازين** and create the code.
+If the first phone shows **دخول مالك التطبيق**, tap it and sign in with the same ChatGPT account that owns this Site. After returning, open **ربط الجهازين** and create the code.
 
 ## 2. Add it to each iPhone's Home Screen
 
 1. In Safari, tap **Share** (the square with an upward arrow).
 2. Choose **Add to Home Screen / إضافة إلى الشاشة الرئيسية**. Scroll through the actions if needed.
-3. Keep the name **ذِكر ❤️** and tap **Add / إضافة**.
+3. Keep the name **ذِكر** and tap **Add / إضافة**.
 4. Close Safari and open the new icon on the Home Screen.
 5. Repeat on your sister's phone.
 
@@ -28,7 +28,7 @@ Both phones need iOS 16.4 or later. Check Settings → General → About → iOS
 
 On your phone:
 
-1. Tap the link icon or **ربط الجهازين**. If shown, tap **دخول صاحبة التطبيق** and sign in with your own ChatGPT account.
+1. Tap the link icon or **ربط الجهازين**. If shown, tap **دخول مالك التطبيق** and sign in with your own ChatGPT account.
 2. Tap **إنشاء رمز ربط**. If an unfinished pair was started in Safari, use **استعادة الربط على هذا الجهاز** to move it to the installed app and receive a fresh code.
 3. Give your sister the displayed six-digit code. It expires after ten minutes.
 
@@ -47,14 +47,14 @@ Your phone checks periodically while open. You can also tap **تحديث حال�
 3. Repeat on the other phone.
 4. Keep both apps open briefly so their subscriptions are saved.
 
-If permission was denied, open iPhone Settings → Notifications → **ذِكر ❤️**, allow notifications, then reopen the installed app. If the option is absent, confirm you opened the installed icon rather than a Safari tab.
+If permission was denied, open iPhone Settings → Notifications → **ذِكر**, allow notifications, then reopen the installed app. If the option is absent, confirm you opened the installed icon rather than a Safari tab.
 
 ## 5. Test both directions
 
 1. Lock your sister's phone.
-2. Tap **استغفر الله ❤️** on your phone.
-3. You should see **تم الذكر ❤️** after the push provider accepts the message.
-4. Her notification should show **تذكير ❤️** and **استغفر الله**, without a sender name.
+2. Tap **استغفر الله** on your phone.
+3. You should see **تم الذكر** after the push provider accepts the message.
+4. Her notification should show **تذكير** and **استغفر الله**, without a sender name.
 5. Send one back from her phone.
 
 Try all seven buttons, dark mode, large text, and a notification while the receiver is using another app. The buttons pause for two seconds to prevent rapid taps. No iPhone vibration is promised: Safari does not support the vibration API.
@@ -69,7 +69,7 @@ Try all seven buttons, dark mode, large text, and a notification while the recei
 - **No internet:** reconnect and retry deliberately. The app does not queue or automatically resend reminders.
 - **Expired code:** the original first installation can generate a new code.
 - **Pair started in the wrong browser:** sign in as the owner and choose **استعادة الربط على هذا الجهاز**. This works only before the second phone joins.
-- **Third device or deleted installation after pairing:** administrator recovery is needed; there is no public takeover/reset button.
+- **Replacing the other device:** open **الربط → فصل الربط → تأكيد الفصل** on either linked device, then **إنشاء رمز ربط**. The replacement device enters that code. The disconnected device loses access. The device that initiated unlinking keeps its notification subscription and becomes the code creator. A fully lost installation still needs administrator recovery.
 
 ## Administrator recovery and deletion
 
@@ -95,3 +95,7 @@ The updated app no longer intercepts page navigation or sign-in redirects. Open 
 ### Stuck on the old offline screen despite an internet connection
 
 Open `/repair.html?v=5` on the same app origin in Safari. It updates the existing notification worker, waits until the new worker controls the page, checks the API, and opens the home screen. It does not unregister push, clear cookies, reset pairing, or send a notification. If it cannot reach the app, it says so without claiming the phone is offline. Do not clear all website data.
+
+## Disconnecting and pairing again
+
+Either linked device can choose **الربط → فصل الربط → تأكيد الفصل**. This revokes both old device credentials, removes the other subscription, and keeps only the initiating device with a fresh credential. It can create a new code without another ChatGPT login. On the replacement device, use **رمز الربط → ربط**, then enable notifications. Existing notifications already accepted by a push provider may still arrive; disconnecting cannot retract them.

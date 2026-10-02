@@ -35,7 +35,7 @@ async function isSiteOwner(request:Request) {
 async function rate(id:string,milliseconds:number){
   const now=Date.now();
   const result=await database().prepare('INSERT INTO limits(id,at) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET at=excluded.at WHERE limits.at <= ?').bind(id,now,now-milliseconds).run();
-  if(!result.meta.changes)reject(429,'انتظري قليلاً ثم حاولي مجدداً.');
+  if(!result.meta.changes)reject(429,'مهلة قصيرة قبل المحاولة التالية.');
 }
 async function current(request:Request){
   const token=deviceCookie(request);
@@ -57,7 +57,7 @@ async function handle(request:Request){
   // All subscription/send writes still require a valid paired device credential.
   if(request.method==='GET')return response(publicStatus(await current(request),isOwner));
   const origin=request.headers.get('origin');
-  if(!origin || origin!==env.APP_ORIGIN)reject(403,'افتحي التطبيق من رابطه الأصلي.');
+  if(!origin || origin!==env.APP_ORIGIN)reject(403,'الرابط غير صالح لهذا الطلب.');
   if(!request.headers.get('content-type')?.startsWith('application/json'))reject(415,'طلب غير صالح.');
   const raw=await request.text();
   if(raw.length>8000)reject(413,'طلب كبير جداً.');
@@ -65,7 +65,7 @@ async function handle(request:Request){
   const {action}=input||{};
   const {pair,role,hash,token}=await current(request);
   if(action==='create'||action==='recover'){
-    if(role!=='owner'&&!isOwner)reject(401,'إنشاء الربط متاح لصاحبة التطبيق فقط. سجّلي الدخول بحسابك، والجهاز الآخر يدخل بالرمز فقط.');
+    if(role!=='owner'&&!isOwner)reject(401,'إنشاء الربط يتطلب حساب مالك التطبيق.');
     await rate('create',5000);
     if(action==='recover'){
       if(!isOwner||!pair||pair.guest)reject(409,'لا يمكن استعادة ربط مكتمل.');
@@ -73,10 +73,10 @@ async function handle(request:Request){
       const code=randomCode();
       const now=Date.now();
       const result=await database().prepare('UPDATE pair SET owner=?,owner_subscription=NULL,code_hash=?,expires=? WHERE id=1 AND owner=? AND guest IS NULL').bind(await digest(credential),await digest(code),now+600000,pair.owner).run();
-      if(!result.meta.changes)reject(409,'تغيّرت حالة الربط. حدّثي الصفحة.');
+      if(!result.meta.changes)reject(409,'تغيّرت حالة الربط.');
       return response({code,expiresAt:now+600000},200,credential);
     }
-    if(pair&&!role)reject(409,'هذا التطبيق مرتبط بجهاز آخر بالفعل. استخدمي رمز الربط.');
+    if(pair&&!role)reject(409,'يوجد ربط على جهاز آخر.');
     if(pair?.guest)reject(409,'الجهازان مرتبطان بالفعل.');
     const credential=token||randomToken();
     const owner=hash||await digest(credential);
@@ -92,8 +92,8 @@ async function handle(request:Request){
   }
   if(action==='join'){
     await rate('join',3000);
-    if(!validCode(input.code))reject(400,'أدخلي ستة أرقام.');
-    if(role==='owner')reject(409,'استخدمي هذا الرمز على الجهاز الآخر.');
+    if(!validCode(input.code))reject(400,'رمز الربط مكوّن من ستة أرقام.');
+    if(role==='owner')reject(409,'الرمز مخصص للجهاز الآخر.');
     if(role==='guest')return response({paired:true});
     const credential=randomToken();
     const guest=await digest(credential);
@@ -102,7 +102,18 @@ async function handle(request:Request){
     if(!result.meta.changes)reject(409,'الرمز غير صحيح أو انتهت صلاحيته أو استُخدم بالفعل.');
     return response({paired:true},200,credential);
   }
-  if(!role||!pair)reject(403,'اربطي الجهازين أولاً.');
+  if(!role||!pair)reject(403,'الجهاز غير مرتبط.');
+  if(action==='unlink'){
+    const credential=randomToken();
+    // Either paired device may leave. Rotate both credentials atomically;
+    // retain only this device's subscription and its ability to create a code.
+    const result=await database().prepare(`UPDATE pair SET owner=?,guest=NULL,code_hash=NULL,expires=0,
+      owner_subscription=?,guest_subscription=NULL,owner_sent=0,guest_sent=0
+      WHERE id=1 AND owner=? AND guest IS ?`)
+      .bind(await digest(credential),(role==='owner'?pair.owner_subscription:pair.guest_subscription),pair.owner,pair.guest).run();
+    if(!result.meta.changes)reject(409,'تغيّرت حالة الربط.');
+    return response({unlinked:true},200,credential);
+  }
   if(action==='subscribe'){
     if(!validSubscription(input.subscription))reject(400,'اشتراك الإشعارات غير صالح.');
     const subscription=JSON.stringify({endpoint:input.subscription.endpoint,expirationTime:input.subscription.expirationTime??null,keys:input.subscription.keys});
@@ -111,28 +122,28 @@ async function handle(request:Request){
   }
   if(action==='send'){
     if(!validDhikr(input.dhikrID))reject(400,'الذكر غير صالح.');
-    if(!pair.guest)reject(409,'أكملي الربط على الجهاز الآخر.');
+    if(!pair.guest)reject(409,'الربط غير مكتمل.');
     const other=role==='owner'?'guest':'owner';
     const saved=pair[`${other}_subscription`];
-    if(!saved)reject(409,'فعّلي الإشعارات على الجهاز الآخر وافتحي التطبيق عليه.');
+    if(!saved)reject(409,'إشعارات الجهاز الآخر غير مفعّلة.');
     if(!env.VAPID_PUBLIC_KEY||!env.VAPID_PRIVATE_KEY||!env.VAPID_SUBJECT)reject(503,'الإشعارات غير جاهزة بعد.');
     const now=Date.now();
     const result=await database().prepare(`UPDATE pair SET ${role}_sent=? WHERE id=1 AND ${role}=? AND ${role}_sent<=?`).bind(now,hash,now-2000).run();
-    if(!result.meta.changes)reject(429,'انتظري ثانيتين قبل الذكر التالي.');
+    if(!result.meta.changes)reject(429,'مهلة ثانيتين بين الأذكار.');
     const subscription=JSON.parse(saved);
-    if(!validSubscription(subscription))reject(409,'أعيدي تفعيل الإشعارات على الجهاز الآخر.');
-    const payload=await buildPushPayload({data:JSON.stringify({title:'تذكير ❤️',body:DHIKR[input.dhikrID as number],url:'/'}),options:{ttl:3600}},subscription,
+    if(!validSubscription(subscription))reject(409,'اشتراك الجهاز الآخر غير صالح.');
+    const payload=await buildPushPayload({data:JSON.stringify({title:'تذكير',body:DHIKR[input.dhikrID as number],url:'/'}),options:{ttl:3600}},subscription,
       {subject:env.VAPID_SUBJECT,publicKey:env.VAPID_PUBLIC_KEY,privateKey:env.VAPID_PRIVATE_KEY});
     let sent:Response;
-    try{sent=await sendFetch(subscription.endpoint,{...payload,redirect:'manual',signal:AbortSignal.timeout(10000)});}catch(error){console.error('Push transport failed',JSON.stringify(networkError(error)));reject(503,'تعذّر اتصال الخادم بخدمة الإشعارات. حاولي لاحقاً.');}
+    try{sent=await sendFetch(subscription.endpoint,{...payload,redirect:'manual',signal:AbortSignal.timeout(10000)});}catch(error){console.error('Push transport failed',JSON.stringify(networkError(error)));reject(503,'تعذّر اتصال الخادم بخدمة الإشعارات. ');}
     if(sent.status===404||sent.status===410){
       // Clear only the stale value; never overwrite a concurrently refreshed token.
       await database().prepare(`UPDATE pair SET ${other}_subscription=NULL WHERE id=1 AND ${other}_subscription=?`).bind(saved).run();
-      reject(409,'انتهى اشتراك الجهاز الآخر. افتحي التطبيق عليه وفعّلي الإشعارات.');
+      reject(409,'انتهى اشتراك إشعارات الجهاز الآخر.');
     }
     // Cloudflare supports manual/follow only. Never follow a push redirect:
     // !ok below also rejects every 3xx without forwarding VAPID credentials.
-    if(!sent.ok)reject(503,'تعذّر إرسال التذكير الآن. حاولي لاحقاً.');
+    if(!sent.ok)reject(503,'تعذّر إرسال التذكير الآن. ');
     return response({accepted:true});
   }
   reject(400,'طلب غير صالح.');
@@ -142,7 +153,7 @@ async function boundary(request:Request){
     if(error instanceof APIError)return response({error:error.message},error.status);
     // Never log endpoint credentials, cookies or notification payloads.
     console.error('Dhekr request failed',error instanceof Error?error.name:'unknown');
-    return response({error:'تعذّر الاتصال بالخدمة. حاولي مرة أخرى.'},503);
+    return response({error:'تعذّر الاتصال بالخدمة. '},503);
   }
 }
 return boundary;

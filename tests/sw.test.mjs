@@ -27,7 +27,7 @@ test('notification worker leaves navigation to Safari and upgrades existing regi
   assert.equal(claimed, true);
   assert.deepEqual(deleted, ['dhekr-static-v2']);
   await new Promise(resolve => handlers.get('push')({data:{json:()=>({body:'الحمد لله'})},waitUntil:resolve}));
-  assert.equal(notifications[0][0], 'تذكير ❤️');
+  assert.equal(notifications[0][0], 'تذكير');
   assert.equal(notifications[0][1].body, 'الحمد لله');
   assert.equal(handlers.has('notificationclick'), true);
 });
