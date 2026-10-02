@@ -7,6 +7,12 @@ class APIError extends Error {
   constructor(status:number,message:string){super(message);this.status=status;}
 }
 function reject(status:number,message:string):never{throw new APIError(status,message);}
+function networkError(error:unknown){
+  // Strip URLs/tokens and report only transport errors, never subscriptions.
+  const name=error instanceof Error?error.name:'unknown';
+  const message=error instanceof Error?error.message:'';
+  return {name,message:message.replace(/https?:\/\/[^\s]+/g,'[endpoint]').replace(/[A-Za-z0-9_-]{40,}/g,'[redacted]').slice(0,300)};
+}
 function response(body:unknown,status=200,token?:string){
   const headers:Record<string,string>={'Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8','X-Content-Type-Options':'nosniff'};
   if(token)headers['Set-Cookie']=`__Host-dhekr=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000`;
@@ -118,12 +124,14 @@ async function handle(request:Request){
     const payload=await buildPushPayload({data:JSON.stringify({title:'تذكير ❤️',body:DHIKR[input.dhikrID as number],url:'/'}),options:{ttl:3600}},subscription,
       {subject:env.VAPID_SUBJECT,publicKey:env.VAPID_PUBLIC_KEY,privateKey:env.VAPID_PRIVATE_KEY});
     let sent:Response;
-    try{sent=await sendFetch(subscription.endpoint,{...payload,redirect:'error',signal:AbortSignal.timeout(10000)});}catch{reject(503,'تعذّر تأكيد إرسال التذكير. تحققي من الاتصال قبل المحاولة مجدداً.');}
+    try{sent=await sendFetch(subscription.endpoint,{...payload,redirect:'manual',signal:AbortSignal.timeout(10000)});}catch(error){console.error('Push transport failed',JSON.stringify(networkError(error)));reject(503,'تعذّر اتصال الخادم بخدمة الإشعارات. حاولي لاحقاً.');}
     if(sent.status===404||sent.status===410){
       // Clear only the stale value; never overwrite a concurrently refreshed token.
       await database().prepare(`UPDATE pair SET ${other}_subscription=NULL WHERE id=1 AND ${other}_subscription=?`).bind(saved).run();
       reject(409,'انتهى اشتراك الجهاز الآخر. افتحي التطبيق عليه وفعّلي الإشعارات.');
     }
+    // Cloudflare supports manual/follow only. Never follow a push redirect:
+    // !ok below also rejects every 3xx without forwarding VAPID credentials.
     if(!sent.ok)reject(503,'تعذّر إرسال التذكير الآن. حاولي لاحقاً.');
     return response({accepted:true});
   }
