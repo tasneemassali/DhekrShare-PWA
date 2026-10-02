@@ -56,8 +56,9 @@ export default function Home() {
     network(); window.addEventListener('online',network);window.addEventListener('offline',network);
     if(new URLSearchParams(window.location.search).has('pair'))setPanel('pair');
     void refresh();
-    if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js',{scope:'/'}).then(async reg=>{
+    if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js',{scope:'/',updateViaCache:'none'}).then(async reg=>{
       sw.current=reg;
+      void reg.update().catch(()=>{});
       await navigator.serviceWorker.ready;
       await syncSubscription();
     }).catch(()=>setError('تعذّر تجهيز الإشعارات. افتحي التطبيق مجدداً.'));

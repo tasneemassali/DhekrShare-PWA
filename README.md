@@ -11,7 +11,7 @@ Seven buttons send the corresponding dhikr to the other paired device. The succe
 ## Features
 
 - Arabic RTL, warm rounded cards, light/dark mode, large touch targets, accessible status messages.
-- Home Screen manifest, dedicated icons, service worker, notification clicks, and offline fallback.
+- Home Screen manifest, dedicated icons, service worker, notification clicks, and browser-managed navigation.
 - Ten-minute, single-use pairing codes and exactly one two-device pair per deployment.
 - Two-second client and atomic server cooldown; no automatic resend after ambiguous failures.
 - Push subscriptions update when the app reopens; expired subscriptions are invalidated server-side.
@@ -31,7 +31,7 @@ The app uses `@block65/webcrypto-web-push` 2.x with RFC 8291 `aes128gcm` and RFC
 | `lib/dhikr.ts` | Exact seven dhikr strings |
 | `lib/policy.mjs` | Validation, cryptographic randomness and token hashing |
 | `db/schema.ts`, `drizzle/` | Durable database schema and migrations |
-| `public/sw.js` | Push handling, notification clicks and offline fallback |
+| `public/sw.js` | Push handling and notification clicks; no navigation interception |
 | `public/manifest.webmanifest` | Home Screen installation metadata |
 | `tests/` | Validation, real encryption and SQLite security checks |
 | `.openai/hosting.json` | Site identity and logical D1 binding; no credentials |
@@ -46,7 +46,7 @@ Each browser installation receives a random 256-bit credential in a `Secure`, `H
 
 Push endpoints are restricted to known Apple, Google and Mozilla push hosts. Redirects are rejected to prevent server-side request forgery. Only encrypted payloads go to the push service. App infrastructure processes the plaintext dhikr before encryption; this is not independently verifiable end-to-end encryption between the two phones.
 
-No names, contacts or message history are saved. D1 retains two credential hashes, two push subscriptions and operational timestamps. The service worker never caches authenticated pages or API responses. The offline page cannot send or queue messages. An administrator can erase the pair/subscriptions with the reset instructions in SETUP.
+No names, contacts or message history are saved. D1 retains two credential hashes, two push subscriptions and operational timestamps. The service worker never caches authenticated pages or API responses. Opening the app requires a connection; an already-open app shows its offline state and cannot send or queue messages. An administrator can erase the pair/subscriptions with the reset instructions in SETUP.
 
 ## Configuration
 

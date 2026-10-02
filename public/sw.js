@@ -1,13 +1,11 @@
-const CACHE='dhekr-static-v2';
+// Navigation belongs to the browser, including authentication redirects.
+// Never respondWith(fetch(request)) for navigations: Safari rejects redirected
+// responses from a service worker. Push delivery does not need a fetch handler.
 self.addEventListener('install',event=>{
-  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(['/offline.html','/icons/icon-192.png','/icons/icon-512.png'])).then(()=>self.skipWaiting()));
+  event.waitUntil(self.skipWaiting());
 });
 self.addEventListener('activate',event=>{
-  event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('dhekr-static-')&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim()));
-});
-self.addEventListener('fetch',event=>{
-  // Never cache authenticated pages, API responses, cookies, or subscriptions.
-  if(event.request.mode==='navigate')event.respondWith(fetch(event.request).catch(()=>caches.match('/offline.html')));
+  event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('dhekr-static-')).map(key=>caches.delete(key)))).then(()=>self.clients.claim()));
 });
 self.addEventListener('push',event=>{
   let value={title:'تذكير ❤️',body:'استغفر الله'};

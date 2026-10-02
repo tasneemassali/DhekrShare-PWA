@@ -87,3 +87,7 @@ To stop using the service, delete these records and remove/disable the hosted Si
 ## GitHub privacy
 
 At creation time, `tasneemassali/DhekrShare-PWA` was public. The connected GitHub tools could write files but could not change repository visibility. To make it private: repository **Settings → General → Danger Zone → Change repository visibility → Private**. Repository privacy and hosted Site access are separate settings. No server secrets are committed either way.
+
+### Safari says “Response served by service worker has redirections”
+
+The updated app no longer intercepts page navigation or sign-in redirects. Open the main app link in Safari, wait a few seconds for its notification worker to update, then reopen the app and retry sign-in. Do not delete the app or clear website data: that can remove your device pairing cookie. A fresh launch requires an internet connection.
